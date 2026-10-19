@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AkunLMS – Belajar Akuntansi Interaktif</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+tailwind.config = { darkMode: 'class', theme: { extend: { fontFamily: { sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'] } } } };
+try { var t = localStorage.getItem('akun-theme'); if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark'); } catch (e) {}
+</script>
+<style>
+:root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+.fade { animation: fade .25s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .fade { animation: none; } }
+.prose-lms p { margin-bottom: .75rem; line-height: 1.7; max-width: 70ch; }
+.prose-lms ul { list-style: disc; padding-left: 1.25rem; margin-bottom: .75rem; line-height: 1.7; }
+.prose-lms h3 { font-weight: 700; font-size: 1.05rem; margin: 1rem 0 .4rem; }
+.prose-lms table { border-collapse: collapse; width: 100%; font-size: .875rem; margin-bottom: .75rem; }
+.prose-lms th, .prose-lms td { border: 1px solid rgba(100,116,139,.35); padding: .4rem .6rem; text-align: left; }
+.prose-lms th { background: rgba(99,102,241,.12); }
+.wrap-x { overflow-x: auto; }
+button:focus-visible, input:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 min-h-screen">
+
+<header class="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 grid place-items-center text-white font-extrabold">Rp</div>
+    <div class="leading-tight">
+      <div class="font-extrabold text-lg">AkunLMS</div>
+      <div class="text-xs text-slate-500 dark:text-slate-400">Belajar akuntansi dasar</div>
+    </div>
+    <nav id="nav" class="hidden md:flex gap-1 ml-6"></nav>
+    <button id="themeBtn" class="ml-auto px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-700" aria-label="Ganti tema">🌙 Gelap</button>
+  </div>
+  <nav id="navM" class="md:hidden flex gap-1 overflow-x-auto px-3 pb-2"></nav>
+</header>
+
+<main id="app" class="max-w-6xl mx-auto px-4 py-6"></main>
+
+<script>
+const $ = s => document.querySelector(s);
+const rp = n => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
+
+/* ---------- State ---------- */
+const DEF = { done: [0, 0, 0, 0], best: null, scores: [], secs: 0, name: '' };
+let S;
+try { S = Object.assign({}, DEF, JSON.parse(localStorage.getItem('akun-state') || '{}')); } catch (e) { S = Object.assign({}, DEF); }
+const save = () => { try { localStorage.setItem('akun-state', JSON.stringify(S)); } catch (e) {} };
+const PASS = 70;
+const pct = () => Math.round(((S.done.reduce((a, b) => a + b, 0)) + (S.best !== null && S.best >= PASS ? 1 : 0)) / 5 * 100);
+
+let view = 'dash', modIdx = 0, chart1 = null, chart2 = null;
+
+/* ---------- Konten materi ---------- */
+const MOD = [
+ { t: 'Dasar-dasar akuntansi', ic: '📘', c: 'indigo', body: `
+  <p>Akuntansi adalah proses mencatat, menggolongkan, meringkas, dan melaporkan transaksi keuangan agar pemilik usaha bisa mengambil keputusan.</p>
+  <h3>Persamaan dasar akuntansi</h3>
+  <p><b>Aset = Kewajiban + Ekuitas</b>. Semua yang dimiliki usaha (aset) dibiayai oleh utang (kewajiban) atau modal pemilik (ekuitas).</p>
+  <h3>Golongan akun</h3>
+  <div class="wrap-x"><table><tr><th>Golongan</th><th>Contoh</th><th>Saldo normal</th></tr>
+  <tr><td>Aset</td><td>Kas, Piutang, Perlengkapan, Peralatan</td><td>Debit</td></tr>
+  <tr><td>Kewajiban</td><td>Utang usaha, Utang bank</td><td>Kredit</td></tr>
+  <tr><td>Ekuitas</td><td>Modal pemilik</td><td>Kredit</td></tr>
+  <tr><td>Pendapatan</td><td>Pendapatan jasa</td><td>Kredit</td></tr>
+  <tr><td>Beban</td><td>Beban gaji, Beban listrik</td><td>Debit</td></tr></table></div>
+  <p>Coba hitung sendiri di tab <b>Simulator</b>.</p>` },
+ { t: 'Jurnal umum & buku besar', ic: '📒', c: 'emerald', body: `
+  <p>Jurnal umum mencatat transaksi secara berurutan berdasarkan tanggal. Setiap transaksi memengaruhi minimal dua akun, dan total debit harus sama dengan total kredit.</p>
+  <h3>Contoh: pemilik menyetor modal Rp10.000.000</h3>
+  <div class="wrap-x"><table><tr><th>Tanggal</th><th>Akun</th><th>Debit</th><th>Kredit</th></tr>
+  <tr><td>1 Mei</td><td>Kas</td><td>10.000.000</td><td></td></tr>
+  <tr><td></td><td>&nbsp;&nbsp;Modal pemilik</td><td></td><td>10.000.000</td></tr></table></div>
+  <h3>Posting ke buku besar</h3>
+  <p>Setiap baris jurnal dipindahkan (diposting) ke akun yang bersangkutan di buku besar. Dari sana, saldo akhir tiap akun dihitung.</p>
+  <ul><li>Akun saldo normal debit bertambah di sisi debit.</li><li>Akun saldo normal kredit bertambah di sisi kredit.</li></ul>` },
+ { t: 'Neraca saldo', ic: '⚖️', c: 'amber', body: `
+  <p>Neraca saldo adalah daftar seluruh saldo akun buku besar pada satu tanggal tertentu. Tujuannya memeriksa keseimbangan: <b>total debit = total kredit</b>.</p>
+  <div class="wrap-x"><table><tr><th>Akun</th><th>Debit</th><th>Kredit</th></tr>
+  <tr><td>Kas</td><td>8.500.000</td><td></td></tr>
+  <tr><td>Peralatan</td><td>3.000.000</td><td></td></tr>
+  <tr><td>Utang usaha</td><td></td><td>1.500.000</td></tr>
+  <tr><td>Modal pemilik</td><td></td><td>10.000.000</td></tr>
+  <tr><th>Total</th><th>11.500.000</th><th>11.500.000</th></tr></table></div>
+  <p>Jika totalnya tidak sama, periksa kesalahan posting, salah hitung saldo, atau akun yang tertukar sisi.</p>` },
+ { t: 'Laporan keuangan', ic: '📊', c: 'violet', body: `
+  <p>Laporan keuangan menyajikan hasil akhir siklus akuntansi. Tiga laporan utama:</p>
+  <ul><li><b>Laporan laba rugi</b>: pendapatan dikurangi beban = laba atau rugi bersih.</li>
+  <li><b>Laporan perubahan ekuitas</b>: modal awal + laba bersih − prive = modal akhir.</li>
+  <li><b>Laporan posisi keuangan (neraca)</b>: aset, kewajiban, dan ekuitas pada tanggal tertentu.</li></ul>
+  <h3>Urutan siklus akuntansi</h3>
+  <p>Transaksi → Jurnal → Buku besar → Neraca saldo → Laporan keuangan.</p>` }
+];
+const CLR = { indigo: ['bg-indigo-500', 'text-indigo-600 dark:text-indigo-300', 'bg-indigo-50 dark:bg-indigo-950/50'], emerald: ['bg-emerald-500', 'text-emerald-600 dark:text-emerald-300', 'bg-emerald-50 dark:bg-emerald-950/50'], amber: ['bg-amber-500', 'text-amber-600 dark:text-amber-300', 'bg-amber-50 dark:bg-amber-950/50'], violet: ['bg-violet-500', 'text-violet-600 dark:text-violet-300', 'bg-violet-50 dark:bg-violet-950/50'] };
+
+/* ---------- Soal kuis ---------- */
+const QS = [
+ { q: 'Persamaan dasar akuntansi yang benar adalah…', o: ['Aset = Kewajiban − Ekuitas', 'Aset = Kewajiban + Ekuitas', 'Ekuitas = Aset + Kewajiban', 'Kewajiban = Aset + Ekuitas'], a: 1, e: 'Aset dibiayai oleh kewajiban dan ekuitas, jadi Aset = Kewajiban + Ekuitas.' },
+ { q: 'Akun yang saldo normalnya di sisi kredit adalah…', o: ['Kas', 'Peralatan', 'Utang usaha', 'Beban gaji'], a: 2, e: 'Kewajiban seperti utang usaha bersaldo normal kredit. Kas, peralatan, dan beban bersaldo debit.' },
+ { q: 'Jurnal: dibeli perlengkapan secara tunai Rp500.000. Jurnal yang benar…', o: ['Debit Kas, Kredit Perlengkapan', 'Debit Perlengkapan, Kredit Kas', 'Debit Perlengkapan, Kredit Utang usaha', 'Debit Beban, Kredit Modal'], a: 1, e: 'Perlengkapan (aset) bertambah di debit, Kas (aset) berkurang di kredit.' },
+ { q: 'Jurnal: diterima pendapatan jasa tunai Rp2.000.000. Jurnal yang benar…', o: ['Debit Pendapatan jasa, Kredit Kas', 'Debit Piutang, Kredit Kas', 'Debit Kas, Kredit Pendapatan jasa', 'Debit Kas, Kredit Modal'], a: 2, e: 'Kas bertambah (debit), pendapatan bertambah (kredit).' },
+ { q: 'Jurnal: dibayar beban listrik tunai Rp300.000. Jurnal yang benar…', o: ['Debit Beban listrik, Kredit Kas', 'Debit Kas, Kredit Beban listrik', 'Debit Utang usaha, Kredit Kas', 'Debit Beban listrik, Kredit Modal'], a: 0, e: 'Beban bertambah di debit, Kas berkurang di kredit.' },
+ { q: 'Fungsi utama neraca saldo adalah…', o: ['Menghitung laba bersih', 'Memeriksa total debit sama dengan total kredit', 'Mencatat transaksi harian', 'Menentukan nilai aset tetap'], a: 1, e: 'Neraca saldo dipakai untuk menguji keseimbangan debit dan kredit sebelum menyusun laporan.' },
+ { q: 'Pendapatan Rp12.000.000 dan beban Rp7.500.000. Laba bersihnya…', o: ['Rp4.500.000', 'Rp19.500.000', 'Rp5.500.000', 'Rp3.500.000'], a: 0, e: 'Laba bersih = pendapatan − beban = 12.000.000 − 7.500.000 = 4.500.000.' },
+ { q: 'Urutan siklus akuntansi yang benar…', o: ['Laporan keuangan → Jurnal → Buku besar', 'Jurnal → Transaksi → Neraca saldo', 'Transaksi → Jurnal → Buku besar → Neraca saldo → Laporan keuangan', 'Buku besar → Transaksi → Jurnal'], a: 2, e: 'Transaksi dicatat ke jurnal, diposting ke buku besar, diuji lewat neraca saldo, lalu disajikan dalam laporan.' }
+];
+let Q = { i: 0, sel: null, score: 0, fin: false, log: [] };
+
+/* ---------- Navigasi ---------- */
+const TABS = [['dash', '🏠', 'Dashboard'], ['materi', '📚', 'Materi'], ['sim', '🧮', 'Simulator'], ['kuis', '📝', 'Kuis'], ['cert', '🎓', 'Sertifikat']];
+function nav() {
+  const h = TABS.map(([k, ic, l]) => `<button data-v="${k}" class="whitespace-nowrap px-3 py-2 rounded-lg text-sm font-semibold ${view === k ? 'bg-indigo-600 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}">${ic} ${l}</button>`).join('');
+  $('#nav').innerHTML = h; $('#navM').innerHTML = h;
+  document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => go(b.dataset.v));
+}
+function go(v) { view = v; render(); window.scrollTo(0, 0); }
+
+function render() {
+  nav();
+  if (chart1) { chart1.destroy(); chart1 = null; } if (chart2) { chart2.destroy(); chart2 = null; }
+  const a = $('#app');
+  a.innerHTML = '<div class="fade">' + ({ dash: vDash, materi: vMateri, sim: vSim, kuis: vKuis, cert: vCert })[view]() + '</div>';
+  ({ dash: afterDash, materi: afterMateri, sim: afterSim, kuis: afterKuis, cert: afterCert })[view]();
+}
+
+/* ---------- Dashboard ---------- */
+function stat(ic, label, val, grad) {
+  return `<div class="rounded-2xl p-4 text-white bg-gradient-to-br ${grad} shadow-md"><div class="text-2xl">${ic}</div><div class="text-2xl font-extrabold mt-1">${val}</div><div class="text-sm opacity-90">${label}</div></div>`;
+}
+function vDash() {
+  const p = pct(), hrs = (S.secs / 3600).toFixed(1), done = S.done.reduce((a, b) => a + b, 0);
+  return `
+  <h1 class="text-2xl md:text-3xl font-extrabold mb-1">Selamat belajar${S.name ? ', ' + S.name.replace(/[<>&]/g, '') : ''}</h1>
+  <p class="text-slate-500 dark:text-slate-400 mb-5">Selesaikan 4 modul dan lulus kuis (skor ≥ ${PASS}) untuk membuka sertifikat.</p>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+    ${stat('📚', `Total modul (${done} selesai)`, MOD.length, 'from-indigo-500 to-indigo-700')}
+    ${stat('📈', 'Progres belajar', p + '%', 'from-emerald-500 to-teal-600')}
+    ${stat('🏆', 'Skor kuis terbaik', S.best === null ? '–' : S.best, 'from-amber-400 to-orange-500')}
+    ${stat('⏱️', 'Jam belajar', hrs, 'from-violet-500 to-fuchsia-600')}
+  </div>
+  <div class="grid lg:grid-cols-5 gap-4">
+    <section class="lg:col-span-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+      <h2 class="font-bold mb-3">Progres per bagian</h2><div class="h-64"><canvas id="c1"></canvas></div>
+    </section>
+    <section class="lg:col-span-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+      <h2 class="font-bold mb-3">Kelulusan</h2><div class="h-48"><canvas id="c2"></canvas></div>
+      <div class="mt-3 h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden"><div class="h-full bg-gradient-to-r from-teal-400 to-emerald-500" style="width:${p}%"></div></div>
+      <p class="text-sm mt-2 text-slate-500 dark:text-slate-400">${p === 100 ? 'Semua syarat terpenuhi. Sertifikat siap dilihat.' : 'Sisa syarat: ' + (4 - done) + ' modul' + (S.best !== null && S.best >= PASS ? '' : ' dan kuis')}.</p>
+    </section>
+  </div>
+  <section class="mt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    ${MOD.map((m, i) => `<button data-m="${i}" class="text-left rounded-2xl p-4 ${CLR[m.c][2]} border border-slate-200 dark:border-slate-800 hover:shadow-md"><div class="text-2xl">${m.ic}</div><div class="font-bold mt-1">${m.t}</div><div class="text-sm ${CLR[m.c][1]} font-semibold">${S.done[i] ? 'Selesai ✓' : 'Mulai belajar'}</div></button>`).join('')}
+  </section>`;
+}
+function afterDash() {
+  document.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { modIdx = +b.dataset.m; go('materi'); });
+  const dark = document.documentElement.classList.contains('dark'), tc = dark ? '#cbd5e1' : '#475569', gc = dark ? 'rgba(148,163,184,.15)' : 'rgba(100,116,139,.15)';
+  const lab = ['Dasar', 'Jurnal & BB', 'Neraca saldo', 'Lap. keuangan', 'Kuis'];
+  const vals = [...S.done.map(d => d * 100), S.best !== null && S.best >= PASS ? 100 : 0];
+  chart1 = new Chart($('#c1'), { type: 'bar', data: { labels: lab, datasets: [{ label: 'Progres (%)', data: vals, backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#14b8a6'], borderRadius: 8 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 100, ticks: { color: tc }, grid: { color: gc } }, x: { ticks: { color: tc }, grid: { display: false } } } } });
+  const p = pct();
+  chart2 = new Chart($('#c2'), { type: 'doughnut', data: { labels: ['Selesai', 'Sisa'], datasets: [{ data: [p, 100 - p], backgroundColor: ['#10b981', dark ? '#334155' : '#e2e8f0'], borderWidth: 0 }] },
+    options: { maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: tc } } } } });
+}
+
+/* ---------- Materi ---------- */
+function vMateri() {
+  const m = MOD[modIdx], c = CLR[m.c];
+  return `
+  <div class="flex gap-2 overflow-x-auto mb-4">${MOD.map((x, i) => `<button data-t="${i}" class="whitespace-nowrap px-4 py-2 rounded-xl text-sm font-semibold border ${i === modIdx ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'}">${x.ic} ${i + 1}. ${x.t}${S.done[i] ? ' ✓' : ''}</button>`).join('')}</div>
+  <article class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+    <div class="${c[0]} h-2"></div>
+    <div class="p-5 md:p-7">
+      <h1 class="text-2xl font-extrabold mb-3">${m.ic} ${m.t}</h1>
+      <div class="prose-lms">${m.body}</div>
+      <div class="flex flex-wrap gap-2 mt-5">
+        <button id="doneBtn" class="px-4 py-2 rounded-xl font-semibold ${S.done[modIdx] ? 'bg-slate-200 dark:bg-slate-700' : 'bg-emerald-500 hover:bg-emerald-600 text-white'}">${S.done[modIdx] ? 'Batalkan tanda selesai' : 'Tandai selesai'}</button>
+        ${modIdx < 3 ? `<button id="nextBtn" class="px-4 py-2 rounded-xl font-semibold bg-indigo-600 hover:bg-indigo-700 text-white">Modul berikutnya</button>` : `<button id="toQuiz" class="px-4 py-2 rounded-xl font-semibold bg-amber-500 hover:bg-amber-600 text-white">Ke kuis</button>`}
+      </div>
+    </div>
+  </article>`;
+}
+function afterMateri() {
+  document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { modIdx = +b.dataset.t; render(); });
+  $('#doneBtn').onclick = () => { S.done[modIdx] = S.done[modIdx] ? 0 : 1; save(); render(); };
+  const n = $('#nextBtn'); if (n) n.onclick = () => { modIdx++; render(); window.scrollTo(0, 0); };
+  const q = $('#toQuiz'); if (q) q.onclick = () => go('kuis');
+}
+
+/* ---------- Simulator ---------- */
+const FLD = [['kas', 'Kas', 'a', 15000000], ['piutang', 'Piutang usaha', 'a', 3000000], ['alat', 'Peralatan', 'a', 7000000], ['utang', 'Utang usaha', 'k', 5000000], ['bank', 'Utang bank', 'k', 4000000], ['modal', 'Modal pemilik', 'e', 14000000], ['laba', 'Laba ditahan', 'e', 2000000]];
+const SV = {}; FLD.forEach(f => SV[f[0]] = f[3]);
+function box(g, title, color) {
+  return `<div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+    <h2 class="font-bold ${color} mb-3">${title}</h2>
+    ${FLD.filter(f => f[2] === g).map(f => `<label class="block mb-2 text-sm font-medium">${f[1]}<input data-f="${f[0]}" type="number" min="0" step="100000" value="${SV[f[0]]}" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2"></label>`).join('')}
+    <div class="border-t border-slate-200 dark:border-slate-700 pt-2 mt-2 flex justify-between font-bold"><span>Total</span><span id="t-${g}">–</span></div></div>`;
+}
+function vSim() {
+  return `<h1 class="text-2xl font-extrabold mb-1">Simulator persamaan dasar akuntansi</h1>
+  <p class="text-slate-500 dark:text-slate-400 mb-4">Ubah angka di kolom mana pun. Total dihitung otomatis dan dicek apakah Aset = Kewajiban + Ekuitas.</p>
+  <div class="grid md:grid-cols-3 gap-3">${box('a', 'Aset', 'text-indigo-600 dark:text-indigo-300')}${box('k', 'Kewajiban', 'text-amber-600 dark:text-amber-300')}${box('e', 'Ekuitas', 'text-emerald-600 dark:text-emerald-300')}</div>
+  <div id="simRes" class="mt-4 rounded-2xl p-5 text-white"></div>
+  <div class="mt-3 flex flex-wrap gap-2">
+    <button id="simAuto" class="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-600 text-white font-semibold">Seimbangkan lewat modal pemilik</button>
+    <button id="simReset" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 font-semibold">Kembalikan contoh</button>
+  </div>`;
+}
+function simCalc() {
+  const sum = g => FLD.filter(f => f[2] === g).reduce((s, f) => s + (+SV[f[0]] || 0), 0);
+  const A = sum('a'), K = sum('k'), E = sum('e'), diff = A - (K + E);
+  $('#t-a').textContent = rp(A); $('#t-k').textContent = rp(K); $('#t-e').textContent = rp(E);
+  const r = $('#simRes'), ok = diff === 0;
+  r.className = 'mt-4 rounded-2xl p-5 text-white ' + (ok ? 'bg-gradient-to-r from-emerald-500 to-teal-600' : 'bg-gradient-to-r from-amber-500 to-orange-600');
+  r.innerHTML = `<div class="text-lg font-extrabold">${rp(A)} ${ok ? '=' : '≠'} ${rp(K)} + ${rp(E)}</div>
+    <div class="mt-1">${ok ? 'Seimbang. Persamaan dasar akuntansi terpenuhi.' : (diff > 0 ? 'Aset lebih besar ' + rp(diff) + ' dari kewajiban + ekuitas. Tambah kewajiban atau ekuitas.' : 'Kewajiban + ekuitas lebih besar ' + rp(-diff) + ' dari aset. Tambah aset atau kurangi sisi kanan.')}</div>`;
+  return diff;
+}
+function afterSim() {
+  document.querySelectorAll('[data-f]').forEach(i => i.oninput = () => { SV[i.dataset.f] = Math.max(0, +i.value || 0); simCalc(); });
+  $('#simAuto').onclick = () => { const d = simCalc(); SV.modal = Math.max(0, SV.modal + d); render(); };
+  $('#simReset').onclick = () => { FLD.forEach(f => SV[f[0]] = f[3]); render(); };
+  simCalc();
+}
+
+/* ---------- Kuis ---------- */
+function vKuis() {
+  if (Q.fin) {
+    const sc = Math.round(Q.score / QS.length * 100), ok = sc >= PASS;
+    return `<div class="rounded-2xl p-6 text-white bg-gradient-to-br ${ok ? 'from-emerald-500 to-teal-600' : 'from-amber-500 to-orange-600'}">
+      <div class="text-4xl font-extrabold">${sc}</div><div class="font-semibold">${Q.score} dari ${QS.length} benar. ${ok ? 'Lulus kuis.' : 'Belum lulus. Batas lulus ' + PASS + '.'}</div></div>
+      <h2 class="font-bold mt-5 mb-2">Ulasan jawaban</h2>
+      ${QS.map((x, i) => { const l = Q.log[i]; return `<div class="rounded-xl p-4 mb-2 bg-white dark:bg-slate-900 border-l-4 ${l === x.a ? 'border-emerald-500' : 'border-rose-500'}"><div class="font-semibold">${i + 1}. ${x.q}</div>
+        <div class="text-sm mt-1">Jawabanmu: ${x.o[l]} ${l === x.a ? '✓' : '✗'}</div>${l === x.a ? '' : `<div class="text-sm">Yang benar: <b>${x.o[x.a]}</b></div>`}<div class="text-sm text-slate-500 dark:text-slate-400 mt-1">${x.e}</div></div>`; }).join('')}
+      <div class="flex gap-2 mt-3"><button id="retry" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold">Ulangi kuis</button>${pct() === 100 ? '<button id="toCert" class="px-4 py-2 rounded-xl bg-emerald-500 text-white font-semibold">Lihat sertifikat</button>' : ''}</div>`;
+  }
+  const x = QS[Q.i], ans = Q.sel !== null;
+  return `<div class="flex justify-between text-sm font-semibold mb-2"><span>Soal ${Q.i + 1} dari ${QS.length}</span><span>Benar: ${Q.score}</span></div>
+  <div class="h-2 rounded-full bg-slate-200 dark:bg-slate-700 mb-4 overflow-hidden"><div class="h-full bg-violet-500" style="width:${Q.i / QS.length * 100}%"></div></div>
+  <div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5">
+    <h1 class="text-lg font-bold mb-4">${x.q}</h1>
+    <div class="grid gap-2">${x.o.map((o, i) => {
+      let cls = 'border-slate-300 dark:border-slate-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40';
+      if (ans) { if (i === x.a) cls = 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50'; else if (i === Q.sel) cls = 'border-rose-500 bg-rose-50 dark:bg-rose-950/50'; else cls = 'border-slate-200 dark:border-slate-700 opacity-60'; }
+      return `<button data-o="${i}" ${ans ? 'disabled' : ''} class="text-left px-4 py-3 rounded-xl border-2 font-medium ${cls}">${String.fromCharCode(65 + i)}. ${o}</button>`; }).join('')}</div>
+    ${ans ? `<div class="mt-4 rounded-xl p-3 text-sm ${Q.sel === x.a ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-rose-100 dark:bg-rose-900/40'}"><b>${Q.sel === x.a ? 'Benar.' : 'Kurang tepat.'}</b> ${x.e}</div>
+    <button id="nextQ" class="mt-3 px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold">${Q.i === QS.length - 1 ? 'Lihat hasil' : 'Soal berikutnya'}</button>` : ''}
+  </div>`;
+}
+function afterKuis() {
+  document.querySelectorAll('[data-o]').forEach(b => b.onclick = () => { const i = +b.dataset.o; Q.sel = i; Q.log[Q.i] = i; if (i === QS[Q.i].a) Q.score++; render(); });
+  const n = $('#nextQ'); if (n) n.onclick = () => {
+    if (Q.i === QS.length - 1) { Q.fin = true; const sc = Math.round(Q.score / QS.length * 100); S.scores.push(sc); S.best = Math.max(S.best || 0, sc); save(); }
+    else { Q.i++; Q.sel = null; } render(); };
+  const r = $('#retry'); if (r) r.onclick = () => { Q = { i: 0, sel: null, score: 0, fin: false, log: [] }; render(); };
+  const c = $('#toCert'); if (c) c.onclick = () => go('cert');
+}
+
+/* ---------- Sertifikat ---------- */
+function vCert() {
+  const p = pct();
+  if (p < 100) return `<div class="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center">
+    <div class="text-5xl mb-2">🔒</div><h1 class="text-xl font-extrabold mb-1">Sertifikat belum terbuka</h1>
+    <p class="text-slate-500 dark:text-slate-400 mb-4">Progres kamu ${p}%. Selesaikan semua modul dan lulus kuis untuk membukanya.</p>
+    <div class="max-w-md mx-auto h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden"><div class="h-full bg-gradient-to-r from-indigo-500 to-teal-400" style="width:${p}%"></div></div>
+    <button data-v="materi" class="mt-5 px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold">Lanjut belajar</button></div>`;
+  const nm = (S.name || 'Nama Peserta').replace(/[<>&]/g, '');
+  return `<label class="block text-sm font-semibold mb-3">Nama di sertifikat
+    <input id="nm" value="${S.name.replace(/"/g, '')}" placeholder="Tulis nama lengkap" class="mt-1 w-full max-w-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2"></label>
+  <div class="rounded-3xl p-1 bg-gradient-to-br from-amber-400 via-indigo-500 to-teal-400">
+   <div class="rounded-[22px] bg-white text-slate-800 px-6 py-10 md:py-14 text-center" id="certBox">
+    <div class="text-5xl">🎓</div>
+    <h1 class="text-3xl md:text-4xl font-extrabold mt-2 text-indigo-700">Sertifikat kelulusan</h1>
+    <p class="mt-4 text-slate-500">Diberikan kepada</p>
+    <div id="certName" class="text-3xl md:text-4xl font-extrabold my-2 text-violet-700 break-words">${nm}</div>
+    <p class="max-w-lg mx-auto text-slate-600">telah menyelesaikan 4 modul Akuntansi Dasar dan lulus kuis dengan skor terbaik <b>${S.best}</b>.</p>
+    <div class="mt-8 flex justify-center gap-10 text-sm text-slate-500"><div><div class="font-bold text-slate-800">${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</div>Tanggal terbit</div><div><div class="font-bold text-slate-800">AkunLMS</div>Penyelenggara</div></div>
+   </div></div>
+  <p class="text-sm text-slate-500 dark:text-slate-400 mt-3">Ini pratinjau sertifikat. Untuk menyimpan, ambil tangkapan layar.</p>`;
+}
+function afterCert() {
+  document.querySelectorAll('[data-v]').forEach(b => { if (b.closest('#app')) b.onclick = () => go(b.dataset.v); });
+  const i = $('#nm'); if (i) i.oninput = () => { S.name = i.value.slice(0, 60); save(); $('#certName').textContent = S.name || 'Nama Peserta'; };
+}
+
+/* ---------- Tema & timer ---------- */
+function themeLabel() { $('#themeBtn').textContent = document.documentElement.classList.contains('dark') ? '☀️ Terang' : '🌙 Gelap'; }
+$('#themeBtn').onclick = () => {
+  const d = document.documentElement.classList.toggle('dark');
+  try { localStorage.setItem('akun-theme', d ? 'dark' : 'light'); } catch (e) {}
+  themeLabel(); if (view === 'dash') render();
+};
+themeLabel();
+setInterval(() => { if (!document.hidden) { S.secs++; if (S.secs % 10 === 0) save(); } }, 1000);
+
+render();
+</script>
+</body>
+</html>
